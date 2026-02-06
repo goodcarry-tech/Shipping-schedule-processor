@@ -66,8 +66,18 @@ def parse_cosco_pdf(file):
                     etd_match = re.search(r'2026-\s*(\d{2})-\s*(\d{2})', etd_raw)
                     etd = f"{etd_match.group(1)}-{etd_match.group(2)}" if etd_match else ""
                     
-                    # T/S Port
-                    ts_port = str(row1[8]).strip()
+                    # T/S Port - 檢查是否有 DIRECT 或其他關鍵字
+                    ts_port_raw = str(row1[8]).strip()
+                    ts_port_upper = ts_port_raw.upper()
+                    
+                    # 標準化 T/S Port 值
+                    if 'DIRECT' in ts_port_upper:
+                        ts_port = 'DIRECT'
+                    elif 'TRANSSHIPMENT' in ts_port_upper or 'T/S' in ts_port_upper:
+                        ts_port = 'Transshipment'
+                    else:
+                        # 保留原始值（如 Port kelang）
+                        ts_port = ts_port_raw
                     
                     # Transit Time
                     transit = str(row1[12]).strip() if len(row1) > 12 else ""
@@ -153,6 +163,7 @@ def parse_one_pdf(file):
                     
                     for j in range(i, min(i+20, len(lines))):
                         check_line = lines[j].strip()
+                        check_line_upper = check_line.upper()
                         
                         # Origin Destination
                         if check_line == 'Origin Destination':
@@ -163,9 +174,11 @@ def parse_one_pdf(file):
                                     etd = f"{dates[0][1]}-{dates[0][2]}"
                                     eta = f"{dates[1][1]}-{dates[1][2]}"
                         
-                        # TRANSSHIPMENT
-                        if check_line == 'TRANSSHIPMENT':
-                            ts_port = 'TRANSSHIPMENT'
+                        # T/S Port - Check for TRANSSHIPMENT or DIRECT
+                        if 'TRANSSHIPMENT' in check_line_upper:
+                            ts_port = 'Transshipment'
+                        elif 'DIRECT' in check_line_upper:
+                            ts_port = 'DIRECT'
                         
                         # Service
                         service_match = re.search(r'Service.*?Origin.*?Destination', check_line)
@@ -211,11 +224,17 @@ def parse_sitc_excel(file):
     
     # 1. 從 A1 擷取 Service (只要英文字母和數字組合)
     a1_value = str(ws['A1'].value) if ws['A1'].value else ""
+    a1_upper = a1_value.upper()
     service_match = re.search(r'([A-Z]+\d+[A-Z]*)', a1_value)
     service = service_match.group(1) if service_match else ""
     
-    # 2. 從 A1 判斷是否為 DIRECT
-    ts_port = "DIRECT" if "DIRECT" in a1_value.upper() else ""
+    # 2. 從 A1 判斷 T/S Port 類型
+    if "DIRECT" in a1_upper:
+        ts_port = "DIRECT"
+    elif "TRANSSHIPMENT" in a1_upper or "T/S" in a1_upper:
+        ts_port = "Transshipment"
+    else:
+        ts_port = ""
     
     # 3. 從 Row 4 提取 Transit Time
     transit_time = ""
